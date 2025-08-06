@@ -1,18 +1,46 @@
-
 import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+from flask import Flask
+from threading import Thread
 
+# -------------------------------
+# Mini serveur pour Render gratuit
+# -------------------------------
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+Thread(target=run).start()
+
+# -------------------------------
+# Récupération des variables d'environnement
+# -------------------------------
+def must_get_env(var):
+    value = os.getenv(var)
+    if value is None:
+        raise RuntimeError(f"Missing required environment variable: {var}")
+    return value
+
+TOKEN = must_get_env("token")
+GUILD_ID = int(must_get_env("guildId"))
+ADMIN_CHANNEL_ID = int(must_get_env("adminChannelId"))
+FORM_SUBMIT_CHANNEL_ID = int(must_get_env("requestChannelId"))
+PUBLIC_BOUNTY_CHANNEL_ID = int(must_get_env("publicChannelId"))
+# TICKET_CATEGORY_ID = int(os.getenv("ticketCategoryId", 0))  # Optionnel
+
+# -------------------------------
+# Bot Discord
+# -------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = int(os.getenv("GUILD_ID"))
-ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID"))
-FORM_SUBMIT_CHANNEL_ID = int(os.getenv("FORM_SUBMIT_CHANNEL_ID"))
-PUBLIC_BOUNTY_CHANNEL_ID = int(os.getenv("PUBLIC_BOUNTY_CHANNEL_ID"))
 
 class BountyForm(discord.ui.Modal, title="Demande de Prime"):
     pseudo_pala = discord.ui.TextInput(label="Votre pseudo Paladium", required=True)
@@ -74,11 +102,11 @@ class ClaimBountyView(discord.ui.View):
         }
         category = discord.utils.get(guild.categories, name="Tickets") or await guild.create_category("Tickets")
         ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites, category=category)
+
         await ticket_channel.send(f"""Bienvenue {interaction.user.mention} !
 Merci de fournir une **preuve de kill** pour la prime sur **{self.cible}**.
 Montant : {self.montant}.
 Un membre du staff va vous répondre.""")
-
 
 @bot.event
 async def on_ready():
