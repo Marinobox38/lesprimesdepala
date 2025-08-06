@@ -74,10 +74,11 @@ class ClaimBountyView(discord.ui.View):
         }
         category = discord.utils.get(guild.categories, name="Tickets") or await guild.create_category("Tickets")
         ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites, category=category)
-        await ticket_channel.send(f"Bienvenue {interaction.user.mention} !
+        await ticket_channel.send(f"""Bienvenue {interaction.user.mention} !
 Merci de fournir une **preuve de kill** pour la prime sur **{self.cible}**.
 Montant : {self.montant}.
-Un membre du staff va vous répondre.")
+Un membre du staff va vous répondre.""")
+
 
 @bot.event
 async def on_ready():
