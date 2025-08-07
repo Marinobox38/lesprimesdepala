@@ -155,7 +155,7 @@ class ClaimBountyView(discord.ui.View):
         ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites, category=category)
 
         view = CloseTicketView()
-        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} réclame une prime sur **{self.cible}**.
+        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} réclame une prime sur **{self.cible}**.")
 Montant : {self.montant}
 Merci d'envoyer la preuve ici !", view=view)
         await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
