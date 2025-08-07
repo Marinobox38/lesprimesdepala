@@ -29,7 +29,7 @@ TOKEN = must_get_env("token")
 GUILD_ID = int(must_get_env("guildId"))
 ADMIN_CHANNEL_ID = int(must_get_env("adminChannelId"))
 FORM_SUBMIT_CHANNEL_ID = int(must_get_env("requestChannelId"))
-PUBLIC_BOUNTY_CHANNEL_ID = 1402778898923651242
+PUBLIC_BOUNTY_CHANNEL_ID = 1402779650421424168  # ← salon public des primes (modifié)
 STAFF_ROLE_ID = 123456789012345678  # À adapter
 PRIME_PING_ROLE_ID = 1403052017521393755
 LOG_CHANNEL_ID = 1403052907364093982
@@ -59,7 +59,21 @@ class PrimeButtons(discord.ui.View):
 
     @discord.ui.button(label="J'ai tué la cible", style=discord.ButtonStyle.success, custom_id="claim_button")
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Merci d'envoyer une capture d'écran comme preuve.", ephemeral=True)
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True),
+            interaction.guild.get_role(STAFF_ROLE_ID): discord.PermissionOverwrite(view_channel=True)
+        }
+        ticket_channel = await interaction.guild.create_text_channel(
+            name=f"preuve-{interaction.user.name}",
+            overwrites=overwrites,
+            category=interaction.channel.category
+        )
+        await ticket_channel.send(
+            f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} affirme avoir tué **{self.cible}**. Merci de fournir une preuve.",
+            view=CloseTicketView()
+        )
+        await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
 
 class CloseTicketView(discord.ui.View):
     def __init__(self):
@@ -87,7 +101,7 @@ class ReportButton(discord.ui.View):
             category=interaction.channel.category
         )
         await ticket_channel.send(
-            f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} réclame une prime sur **{self.cible}**.\nMerci d'envoyer la preuve ici !",
+            f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} signale une prime sur **{self.cible}**.",
             view=CloseTicketView()
         )
         await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
@@ -104,19 +118,31 @@ class PrimeModal(discord.ui.Modal, title="Proposer une Prime"):
                               color=discord.Color.orange())
         embed.set_footer(text=f"Proposée par {interaction.user.display_name}")
 
-        view = PrimeValidationView(interaction.user, self.pseudo.value)
-        await bot.get_channel(PUBLIC_BOUNTY_CHANNEL_ID).send(embed=embed, view=view)
+        view = PrimeValidationView(interaction.user, self.pseudo.value, self.cible.value, self.montant.value, self.faction.value)
+        await bot.get_channel(FORM_SUBMIT_CHANNEL_ID).send(embed=embed, view=view)
         await interaction.response.send_message("✅ Prime envoyée pour validation !", ephemeral=True)
 
 class PrimeValidationView(discord.ui.View):
-    def __init__(self, author, author_name):
+    def __init__(self, author, pseudo, cible, montant, faction):
         super().__init__(timeout=None)
         self.author = author
-        self.author_name = author_name
+        self.pseudo = pseudo
+        self.cible = cible
+        self.montant = montant
+        self.faction = faction
 
     @discord.ui.button(label="✅ Accepter", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.author.send("✅ Votre prime a été acceptée et publiée publiquement !")
+
+        embed = discord.Embed(title="🎯 Prime Publique",
+                              description=f"**Cible :** {self.cible}\n**Montant :** {self.montant}\n**Faction :** {self.faction}\n**Proposée par :** {self.pseudo}",
+                              color=discord.Color.red())
+        view = discord.ui.View(timeout=None)
+        view.add_item(PrimeButtons(self.cible).children[0])
+        view.add_item(ReportButton(self.cible).children[0])
+
+        await bot.get_channel(PUBLIC_BOUNTY_CHANNEL_ID).send(f"<@&{PRIME_PING_ROLE_ID}>", embed=embed, view=view)
         await interaction.response.send_message("✅ Prime acceptée !", ephemeral=True)
 
     @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.danger)
@@ -155,9 +181,6 @@ async def ticket(interaction: discord.Interaction):
     )
     await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — Nouveau ticket de {interaction.user.mention}", view=CloseTicketView())
     await interaction.response.send_message(f"🎟️ Ticket créé : {ticket_channel.mention}", ephemeral=True)
-
-# ========== Modération ==========
-# (inchangé)
 
 # ========== Commande d'explication prime ==========
 @bot.tree.command(name="afficher", description="Explique le fonctionnement des primes avec un bouton", guild=discord.Object(id=GUILD_ID))
