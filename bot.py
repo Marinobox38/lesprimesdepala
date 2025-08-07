@@ -8,7 +8,7 @@ from threading import Thread
 from datetime import datetime, timedelta
 import asyncio
 
-# ========== Flask Keep Alive ==========
+
 app = Flask('')
 
 @app.route('/')
@@ -20,7 +20,7 @@ def run():
 
 Thread(target=run).start()
 
-# ========== Variables ==========
+
 def must_get_env(var):
     value = os.getenv(var)
     if value is None:
@@ -43,7 +43,7 @@ TICKET_CATEGORY_ID = None  # À définir si tu veux organiser les tickets dans u
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ========== Messages de bienvenue ==========
+
 welcome_messages = [
     "Bienvenue sur le serveur !",
     "Salut et bienvenue, amuse-toi bien !",
@@ -52,7 +52,7 @@ welcome_messages = [
     "Bienvenue, prêt à relever des défis ?"
 ]
 
-# ========== On Ready ==========
+
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
@@ -60,7 +60,7 @@ async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     check_giveaways.start()  # démarre la tâche de vérification des giveaways
 
-# ========== Bienvenue ==========
+
 @bot.event
 async def on_member_join(member: discord.Member):
     channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
@@ -78,13 +78,13 @@ async def on_member_join(member: discord.Member):
     except discord.Forbidden:
         pass
 
-# ========== Logs ==========
+
 async def log_action(message):
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if channel:
         await channel.send(message)
 
-# ========== Views ==========
+
 class CloseTicketView(discord.ui.View):
     def __init__(self, ticket_channel):
         super().__init__(timeout=None)
@@ -207,7 +207,7 @@ class PrimeValidationView(discord.ui.View):
         await interaction.response.send_message("❌ Prime refusée et auteur prévenu.", ephemeral=True)
         await interaction.message.delete()
 
-# ========== Commandes Slash ==========
+
 
 @bot.tree.command(name="prime", description="Proposer une prime", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(
@@ -334,14 +334,14 @@ async def afficher(interaction: discord.Interaction):
     view = AfficherPrimeView()
     await interaction.response.send_message(embed=embed, view=view)
 
-# Commande pour envoyer un message au nom du bot (admin uniquement)
-@bot.tree.command(name="say", description="Faire dire un message au bot", guild=discord.Object(id=GUILD_ID))
+
+@bot.tree.command(name="message", description="Faire dire un message au bot", guild=discord.Object(id=GUILD_ID))
 @commands.has_role(ADMIN_ROLE_ID)
 @app_commands.describe(message="Message à faire dire au bot")
 async def say(interaction: discord.Interaction, message: str):
     await interaction.response.send_message(message)
 
-# Commande pour envoyer un embed personnalisé (admin uniquement)
+
 @bot.tree.command(name="embed", description="Envoyer un embed personnalisé", guild=discord.Object(id=GUILD_ID))
 @commands.has_role(ADMIN_ROLE_ID)
 @app_commands.describe(title="Titre de l'embed", description="Description de l'embed", color="Couleur hex (ex: #FF0000)")
@@ -353,7 +353,7 @@ async def embed(interaction: discord.Interaction, title: str, description: str, 
     embed_msg = discord.Embed(title=title, description=description, color=color_value)
     await interaction.response.send_message(embed=embed_msg)
 
-# ========== Modération (ban, kick, mute, unmute) ==========
+
 async def send_log_and_dm(action, member: discord.Member, staff: discord.Member, reason: str):
     # Envoi DM à la cible
     try:
@@ -381,8 +381,8 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
     await send_log_and_dm("kické", member, interaction.user, reason)
     await interaction.response.send_message(f"{member} a été expulsé.", ephemeral=True)
 
-# Mute/unmute via rôle "Muted" à créer dans ton serveur
-MUTED_ROLE_NAME = "Muted"
+
+MUTED_ROLE_NAME = "Mute"
 
 @bot.tree.command(name="mute", description="Mute un membre", guild=discord.Object(id=GUILD_ID))
 @commands.has_role(ADMIN_ROLE_ID)
@@ -408,7 +408,7 @@ async def unmute(interaction: discord.Interaction, member: discord.Member):
     await send_log_and_dm("unmuté", member, interaction.user, "Unmute manuel")
     await interaction.response.send_message(f"{member} a été unmute.", ephemeral=True)
 
-# ========== Giveaways ==========
+
 giveaways = {}  # stocke giveaways actifs : message_id -> info
 
 @bot.tree.command(name="giveaway", description="Créer un giveaway", guild=discord.Object(id=GUILD_ID))
@@ -485,7 +485,7 @@ async def check_giveaways():
     for msg_id in to_remove:
         giveaways.pop(msg_id, None)
 
-# ========== Erreurs et autorisations ==========
+
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRole):
@@ -500,5 +500,5 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     else:
         await interaction.response.send_message(f"Erreur : {error}", ephemeral=True)
 
-# ========== Lancement du bot ==========
+
 bot.run(TOKEN)
