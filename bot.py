@@ -1,5 +1,3 @@
-
-# ========== IMPORTATIONS ET SETUP ==========
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -10,7 +8,7 @@ from datetime import datetime, timedelta
 import asyncio
 import random
 
-# ========== FLASK KEEP ALIVE POUR RENDER ==========
+# ========== Flask Keep Alive ==========
 app = Flask('')
 
 @app.route('/')
@@ -22,7 +20,7 @@ def run():
 
 Thread(target=run).start()
 
-# ========== VARIABLES ==========
+# ========== Variables ==========
 def must_get_env(var):
     value = os.getenv(var)
     if value is None:
@@ -34,20 +32,26 @@ GUILD_ID = int(must_get_env("guildId"))
 ADMIN_CHANNEL_ID = int(must_get_env("adminChannelId"))
 FORM_SUBMIT_CHANNEL_ID = int(must_get_env("requestChannelId"))
 PUBLIC_BOUNTY_CHANNEL_ID = int(must_get_env("publicChannelId"))
-STAFF_ROLE_ID = 123456789012345678
+STAFF_ROLE_ID = 1402780875694801007  # Remplacer par l'ID réel
 PRIME_PING_ROLE_ID = 1403052017521393755
 LOG_CHANNEL_ID = 1403052907364093982
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ========== LOGGING ==========
-async def log_action(message):
-    channel = bot.get_channel(LOG_CHANNEL_ID)
+# ========== Utils ==========
+async def log_action(guild, message):
+    channel = guild.get_channel(LOG_CHANNEL_ID)
     if channel:
         await channel.send(message)
 
-# ========== MODAL POUR PRIME ==========
+async def send_dm(user, message):
+    try:
+        await user.send(message)
+    except Exception:
+        pass  # On ignore si le DM est fermé
+
+# ========== Modal Formulaire Prime ==========
 class BountyForm(discord.ui.Modal, title="Demande de Prime"):
     pseudo_pala = discord.ui.TextInput(label="Votre pseudo Paladium", required=True)
     cible = discord.ui.TextInput(label="Pseudo du joueur visé", required=True)
@@ -59,20 +63,18 @@ class BountyForm(discord.ui.Modal, title="Demande de Prime"):
             pseudo_pala=self.pseudo_pala.value,
             cible=self.cible.value,
             montant=self.montant.value,
-            commentaire=self.commentaire.value or "Aucun",
-            auteur=interaction.user
+            commentaire=self.commentaire.value or "Aucun"
         )
         await interaction.response.send_message("Merci ! Confirmez si vous avez envoyé la prime :", view=view, ephemeral=True)
 
-# ========== CONFIRMATION DU PAIEMENT ==========
+# ========== Payment Confirmation View ==========
 class PaymentConfirmationView(discord.ui.View):
-    def __init__(self, pseudo_pala, cible, montant, commentaire, auteur):
+    def __init__(self, pseudo_pala, cible, montant, commentaire):
         super().__init__(timeout=None)
         self.pseudo_pala = pseudo_pala
         self.cible = cible
         self.montant = montant
         self.commentaire = commentaire
-        self.auteur = auteur
 
     @discord.ui.select(
         placeholder="Avez-vous envoyé le montant de la prime à Lesprimesdepala ?",
@@ -91,8 +93,7 @@ class PaymentConfirmationView(discord.ui.View):
         embed.add_field(name="Prime envoyée ?", value=preuve, inline=False)
         embed.add_field(name="Commentaire", value=self.commentaire, inline=False)
 
-        view = AcceptRefuseView(embed, self.auteur)
-
+        view = AcceptRefuseView(embed, self.pseudo_pala, self.cible, self.montant, self.commentaire)
         channel = bot.get_channel(ADMIN_CHANNEL_ID)
         if channel:
             await channel.send(embed=embed, view=view)
@@ -100,43 +101,63 @@ class PaymentConfirmationView(discord.ui.View):
         else:
             await interaction.response.send_message("❌ Salon admin introuvable.", ephemeral=True)
 
-# ========== ACCEPT/REFUSE VIEW ==========
+# ========== Accept / Refuse View ==========
 class AcceptRefuseView(discord.ui.View):
-    def __init__(self, original_embed, auteur):
+    def __init__(self, original_embed, pseudo_pala, cible, montant, commentaire):
         super().__init__(timeout=None)
         self.original_embed = original_embed
-        self.auteur = auteur
+        self.pseudo_pala = pseudo_pala
+        self.cible = cible
+        self.montant = montant
+        self.commentaire = commentaire
 
     @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
-        cible = self.original_embed.fields[1].value
-        montant = self.original_embed.fields[2].value
+        # Envoi MP à l'auteur
+        guild = interaction.guild
+        member = discord.utils.get(guild.members, name=self.pseudo_pala)
+        if not member:
+            # Essaie par mention ou autre, sinon on ignore MP
+            try:
+                member = await bot.fetch_user(interaction.user.id)
+            except:
+                member = None
+        if member:
+            await send_dm(member, f"Votre demande de prime a été **acceptée**.\n"
+                                 f"Cible : {self.cible}\nMontant : {self.montant}\nCommentaire : {self.commentaire}")
 
+        # Envoi dans le channel public avec ping rôle
         embed = discord.Embed(title="🎯 Prime active !", color=discord.Color.red())
-        embed.add_field(name="Cible", value=cible, inline=False)
-        embed.add_field(name="Montant", value=montant, inline=False)
-        embed.set_footer(text="Cliquez sur le bouton ci-dessous pour réclamer la prime.")
+        embed.add_field(name="Cible", value=self.cible, inline=False)
+        embed.add_field(name="Montant", value=self.montant, inline=False)
+        embed.set_footer(text="Cliquez sur un bouton ci-dessous pour réclamer ou signaler la prime.")
 
-        view = ClaimBountyView(cible, montant)
+        view = ClaimAndReportView(self.cible, self.montant)
 
         channel = bot.get_channel(PUBLIC_BOUNTY_CHANNEL_ID)
         if channel:
             await channel.send(f"<@&{PRIME_PING_ROLE_ID}>", embed=embed, view=view)
             await interaction.response.send_message("Prime acceptée et publiée.", ephemeral=True)
-            await self.auteur.send(f"✅ Votre prime contre **{cible}** a été acceptée pour **{montant}**.")
-        await log_action(f"✅ Prime acceptée : {cible} ({montant}) par {interaction.user.name}")
+        else:
+            await interaction.response.send_message("❌ Salon de publication introuvable.", ephemeral=True)
 
     @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
     async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
-        cible = self.original_embed.fields[1].value
-        montant = self.original_embed.fields[2].value
-        await self.auteur.send(f"❌ Votre demande de prime sur **{cible}** ({montant}) a été refusée.")
+        # MP à l'auteur
+        guild = interaction.guild
+        member = discord.utils.get(guild.members, name=self.pseudo_pala)
+        if not member:
+            try:
+                member = await bot.fetch_user(interaction.user.id)
+            except:
+                member = None
+        if member:
+            await send_dm(member, f"Votre demande de prime a été **refusée**.\n"
+                                 f"Cible : {self.cible}\nMontant : {self.montant}\nCommentaire : {self.commentaire}")
         await interaction.response.send_message("Prime refusée.", ephemeral=True)
-        await log_action(f"❌ Prime refusée : {cible} ({montant}) par {interaction.user.name}")
 
-
-# ========== CLAIM PRIME VIEW ==========
-class ClaimBountyView(discord.ui.View):
+# ========== Claim and Report View ==========
+class ClaimAndReportView(discord.ui.View):
     def __init__(self, cible, montant):
         super().__init__(timeout=None)
         self.cible = cible
@@ -150,15 +171,14 @@ class ClaimBountyView(discord.ui.View):
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            discord.utils.get(guild.roles, id=STAFF_ROLE_ID): discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
 
         ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites, category=category)
 
         view = CloseTicketView()
-        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} réclame une prime sur **{self.cible}**.")
-Montant : {self.montant}
-await interaction.followup.send('Merci d\'envoyer la preuve ici !', view=view)
-await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
+        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} réclame une prime sur **{self.cible}**.\nMontant : {self.montant}\nMerci d'envoyer la preuve ici !", view=view)
+        await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
 
     @discord.ui.button(label="Signaler la prime", style=discord.ButtonStyle.danger)
     async def report(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -168,127 +188,212 @@ await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.me
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            discord.utils.get(guild.roles, id=STAFF_ROLE_ID): discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
 
-        ticket_channel = await guild.create_text_channel(f"report-{interaction.user.name}", overwrites=overwrites, category=category)
-        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} souhaite signaler une prime.
-Merci de décrire la situation ici.")
-        await interaction.response.send_message(f"🚨 Ticket de signalement ouvert : {ticket_channel.mention}", ephemeral=True)
+        ticket_channel = await guild.create_text_channel(f"signalement-{interaction.user.name}", overwrites=overwrites, category=category)
 
-# ========== CLOSE TICKET ==========
+        view = CloseTicketView()
+        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} signale une prime sur **{self.cible}**.\nMerci d'examiner ce signalement.", view=view)
+        await interaction.response.send_message(f"✅ Ticket de signalement ouvert : {ticket_channel.mention}", ephemeral=True)
+
+# ========== Close Ticket View ==========
 class CloseTicketView(discord.ui.View):
     @discord.ui.button(label="Fermer le ticket", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.channel.delete()
 
-# ========== COMMANDE /TICKET-DEPLOY ==========
-@bot.tree.command(name="ticket-deploy", description="Déploie le bouton pour ouvrir un ticket")
-@app_commands.guilds(discord.Object(id=GUILD_ID))
+# ========== Commandes Slash ==========
+
+@bot.tree.command(name="prime", description="Faire une demande de prime")
+async def prime(interaction: discord.Interaction):
+    await interaction.response.send_modal(BountyForm())
+
+@bot.tree.command(name="ticket-deploy", description="Déployer le message de création de ticket")
+@commands.has_permissions(administrator=True)
 async def ticket_deploy(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="Besoin d'aide ?",
-        description="Cliquez sur le bouton ci-dessous pour ouvrir un ticket avec le staff.
-Merci de respecter les modérateurs et d'expliquer clairement votre problème.",
-        color=discord.Color.blue()
-    )
-    view = discord.ui.View()
-    view.add_item(discord.ui.Button(label="Ouvrir un ticket", style=discord.ButtonStyle.success, custom_id="ouvrir_ticket"))
+    embed = discord.Embed(title="Création de ticket", description=(
+        "Pour toute demande ou signalement, utilisez le bouton ci-dessous.\n"
+        "Merci de respecter les modérateurs et les règles du serveur."
+    ), color=discord.Color.blue())
+    view = TicketDeployView()
     await interaction.response.send_message(embed=embed, view=view)
 
-@bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type == discord.InteractionType.component:
-        if interaction.data.get("custom_id") == "ouvrir_ticket":
-            guild = interaction.guild
-            category = discord.utils.get(guild.categories, name="Tickets") or await guild.create_category("Tickets")
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            }
-            channel = await guild.create_text_channel(name=f"ticket-{interaction.user.name}", overwrites=overwrites, category=category)
-            await channel.send(f"<@&{STAFF_ROLE_ID}> — Ticket ouvert par {interaction.user.mention}", view=CloseTicketView())
-            await interaction.response.send_message(f"🎫 Ticket créé : {channel.mention}", ephemeral=True)
-    await bot.tree.process_interaction(interaction)
+class TicketDeployView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-# ========== COMMANDES DE MODÉRATION ==========
-@bot.tree.command(name="ban")
-@app_commands.describe(user="Utilisateur à bannir", reason="Raison")
-async def ban(interaction: discord.Interaction, user: discord.Member, reason: str):
-    await user.send(f"🚫 Vous avez été banni pour la raison suivante : {reason}")
-    await interaction.guild.ban(user, reason=reason)
-    await interaction.response.send_message(f"{user} a été banni.", ephemeral=True)
-    await log_action(f"🔨 {user} banni par {interaction.user} | Raison : {reason}")
+    @discord.ui.button(label="Créer un ticket", style=discord.ButtonStyle.primary)
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        category = discord.utils.get(guild.categories, name="Tickets") or await guild.create_category("Tickets")
 
-@bot.tree.command(name="kick")
-@app_commands.describe(user="Utilisateur à expulser", reason="Raison")
-async def kick(interaction: discord.Interaction, user: discord.Member, reason: str):
-    await user.send(f"👢 Vous avez été expulsé pour : {reason}")
-    await interaction.guild.kick(user, reason=reason)
-    await interaction.response.send_message(f"{user} a été expulsé.", ephemeral=True)
-    await log_action(f"👢 {user} expulsé par {interaction.user} | Raison : {reason}")
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            discord.utils.get(guild.roles, id=STAFF_ROLE_ID): discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
 
-@bot.tree.command(name="mute")
-@app_commands.describe(user="Utilisateur à mute", reason="Raison")
-async def mute(interaction: discord.Interaction, user: discord.Member, reason: str):
-    mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
+        ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites, category=category)
+        view = CloseTicketView()
+        await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} a ouvert un ticket.", view=view)
+        await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
+
+# ========== Modération Commandes ==========
+@bot.tree.command(name="ban", description="Bannir un membre")
+@app_commands.describe(membre="Le membre à bannir", raison="Raison du ban", duree="Durée en minutes (optionnel)")
+@commands.has_permissions(ban_members=True)
+async def ban(interaction: discord.Interaction, membre: discord.Member, raison: str, duree: int = None):
+    try:
+        await membre.ban(reason=raison)
+        await interaction.response.send_message(f"{membre.mention} a été banni pour : {raison} (durée: {duree or 'permanent'})")
+
+        msg = f"Vous avez été banni du serveur {interaction.guild.name}.\nRaison : {raison}\n"
+        if duree:
+            msg += f"Durée : {duree} minutes.\n"
+            await asyncio.sleep(duree * 60)
+            await interaction.guild.unban(membre)
+            await interaction.channel.send(f"{membre.mention} a été débanni automatiquement après {duree} minutes.")
+        await send_dm(membre, msg)
+
+        # Log
+        await log_action(interaction.guild, f"⚠️ {membre} banni par {interaction.user}. Raison : {raison}. Durée : {duree or 'permanent'}")
+    except Exception as e:
+        await interaction.response.send_message(f"Erreur lors du ban : {e}", ephemeral=True)
+
+@bot.tree.command(name="kick", description="Expulser un membre")
+@app_commands.describe(membre="Le membre à expulser", raison="Raison de l'expulsion")
+@commands.has_permissions(kick_members=True)
+async def kick(interaction: discord.Interaction, membre: discord.Member, raison: str):
+    try:
+        await membre.kick(reason=raison)
+        await interaction.response.send_message(f"{membre.mention} a été expulsé pour : {raison}")
+        await send_dm(membre, f"Vous avez été expulsé du serveur {interaction.guild.name}.\nRaison : {raison}")
+
+        # Log
+        await log_action(interaction.guild, f"⚠️ {membre} expulsé par {interaction.user}. Raison : {raison}")
+    except Exception as e:
+        await interaction.response.send_message(f"Erreur lors de l'expulsion : {e}", ephemeral=True)
+
+@bot.tree.command(name="mute", description="Mute un membre")
+@app_commands.describe(membre="Le membre à mute", duree="Durée en minutes", raison="Raison")
+@commands.has_permissions(manage_messages=True)
+async def mute(interaction: discord.Interaction, membre: discord.Member, duree: int, raison: str):
+    guild = interaction.guild
+    mute_role = discord.utils.get(guild.roles, name="Muted")
     if not mute_role:
-        mute_role = await interaction.guild.create_role(name="Muted")
-        for channel in interaction.guild.channels:
-            await channel.set_permissions(mute_role, send_messages=False, speak=False)
-    await user.add_roles(mute_role)
-    await user.send(f"🔇 Vous avez été mute : {reason}")
-    await interaction.response.send_message(f"{user} a été mute.", ephemeral=True)
-    await log_action(f"🔇 {user} mute par {interaction.user} | Raison : {reason}")
+        mute_role = await guild.create_role(name="Muted")
 
-@bot.tree.command(name="unmute")
-@app_commands.describe(user="Utilisateur à unmute")
-async def unmute(interaction: discord.Interaction, user: discord.Member):
-    mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
-    await user.remove_roles(mute_role)
-    await user.send("🔊 Vous avez été unmute.")
-    await interaction.response.send_message(f"{user} a été unmute.", ephemeral=True)
-    await log_action(f"🔊 {user} unmute par {interaction.user}")
+        for channel in guild.channels:
+            await channel.set_permissions(mute_role, speak=False, send_messages=False, add_reactions=False)
 
-# ========== COMMANDE GIVEAWAY ==========
+    try:
+        await membre.add_roles(mute_role, reason=raison)
+        await interaction.response.send_message(f"{membre.mention} est mute pour {duree} minutes.\nRaison : {raison}")
+        await send_dm(membre, f"Vous avez été mute sur le serveur {guild.name} pour {duree} minutes.\nRaison : {raison}")
+
+        # Log
+        await log_action(guild, f"🔇 {membre} mute par {interaction.user} pendant {duree} minutes. Raison : {raison}")
+
+        await asyncio.sleep(duree * 60)
+        await membre.remove_roles(mute_role, reason="Fin du mute automatique")
+        await interaction.channel.send(f"{membre.mention} a été unmute automatiquement après {duree} minutes.")
+        await send_dm(membre, f"Votre mute sur le serveur {guild.name} est terminé.")
+    except Exception as e:
+        await interaction.response.send_message(f"Erreur lors du mute : {e}", ephemeral=True)
+
+@bot.tree.command(name="unmute", description="Unmute un membre")
+@app_commands.describe(membre="Le membre à unmute")
+@commands.has_permissions(manage_messages=True)
+async def unmute(interaction: discord.Interaction, membre: discord.Member):
+    guild = interaction.guild
+    mute_role = discord.utils.get(guild.roles, name="Muted")
+    if not mute_role:
+        await interaction.response.send_message("Le rôle Muted n'existe pas.", ephemeral=True)
+        return
+
+    try:
+        await membre.remove_roles(mute_role, reason=f"Unmute demandé par {interaction.user}")
+        await interaction.response.send_message(f"{membre.mention} a été unmute.")
+        await send_dm(membre, f"Vous avez été unmute sur le serveur {guild.name}.")
+
+        # Log
+        await log_action(guild, f"🔈 {membre} unmute par {interaction.user}")
+    except Exception as e:
+        await interaction.response.send_message(f"Erreur lors de l'unmute : {e}", ephemeral=True)
+
+# ========== Giveaways ==========
+class Giveaway:
+    def __init__(self, channel, message, prize, end_time, host):
+        self.channel = channel
+        self.message = message
+        self.prize = prize
+        self.end_time = end_time
+        self.host = host
+        self.entries = set()
+        self.ended = False
+
 giveaways = {}
 
-@bot.tree.command(name="giveaway", description="Crée un giveaway")
-@app_commands.describe(duration="Durée en secondes", prize="Prix à gagner")
-async def giveaway(interaction: discord.Interaction, duration: int, prize: str):
-    embed = discord.Embed(title="🎉 GIVEAWAY 🎉", description=f"Prix : **{prize}**
-Réagissez avec 🎉 pour participer !", color=discord.Color.green())
-    embed.set_footer(text=f"Se termine dans {duration} secondes.")
-    msg = await interaction.channel.send(embed=embed)
-    await msg.add_reaction("🎉")
-    giveaways[msg.id] = {"end_time": datetime.utcnow() + timedelta(seconds=duration), "prize": prize, "message": msg}
-    await interaction.response.send_message("🎉 Giveaway lancé !", ephemeral=True)
+@bot.tree.command(name="giveaway", description="Créer un giveaway")
+@app_commands.describe(channel="Salon où poster le giveaway", duree="Durée en minutes", prix="Nom du prix")
+@commands.has_permissions(administrator=True)
+async def giveaway_create(interaction: discord.Interaction, channel: discord.TextChannel, duree: int, prix: str):
+    end_time = datetime.utcnow() + timedelta(minutes=duree)
+    embed = discord.Embed(title="🎉 Giveaway 🎉", description=f"Prix : {prix}\nFin dans {duree} minutes.", color=discord.Color.gold())
+    embed.set_footer(text="Réagissez avec 🎉 pour participer !")
 
-@tasks.loop(seconds=10)
+    message = await channel.send(embed=embed)
+    await message.add_reaction("🎉")
+
+    giveaways[message.id] = Giveaway(channel, message, prix, end_time, interaction.user)
+    await interaction.response.send_message(f"Giveaway créé dans {channel.mention} pour {duree} minutes.")
+
+@bot.event
+async def on_reaction_add(reaction, user):
+    if user.bot:
+        return
+    if reaction.message.id in giveaways:
+        giveaway = giveaways[reaction.message.id]
+        if reaction.emoji == "🎉":
+            giveaway.entries.add(user.id)
+
+@bot.event
+async def on_reaction_remove(reaction, user):
+    if user.bot:
+        return
+    if reaction.message.id in giveaways:
+        giveaway = giveaways[reaction.message.id]
+        if reaction.emoji == "🎉":
+            giveaway.entries.discard(user.id)
+
+@tasks.loop(seconds=30)
 async def check_giveaways():
-    to_remove = []
-    for gid, data in giveaways.items():
-        if datetime.utcnow() >= data["end_time"]:
-            msg = data["message"]
-            try:
-                msg = await msg.channel.fetch_message(msg.id)
-                users = await msg.reactions[0].users().flatten()
-                users = [u for u in users if not u.bot]
-                winner = random.choice(users) if users else None
-                if winner:
-                    await msg.channel.send(f"🎊 Félicitations {winner.mention} ! Tu gagnes **{data['prize']}**.")
-                else:
-                    await msg.channel.send("Aucun participant valide. Giveaway annulé.")
-            except:
-                pass
-            to_remove.append(gid)
-    for gid in to_remove:
-        del giveaways[gid]
+    now = datetime.utcnow()
+    ended = []
+    for message_id, giveaway in giveaways.items():
+        if not giveaway.ended and now >= giveaway.end_time:
+            giveaway.ended = True
+            if giveaway.entries:
+                winner_id = random.choice(list(giveaway.entries))
+                winner = giveaway.channel.guild.get_member(winner_id)
+                embed = discord.Embed(title="🎉 Giveaway terminé 🎉", description=f"Le gagnant est {winner.mention} !", color=discord.Color.green())
+                await giveaway.message.edit(embed=embed)
+                await giveaway.channel.send(f"Félicitations {winner.mention} ! Tu as gagné : {giveaway.prize}")
+            else:
+                embed = discord.Embed(title="🎉 Giveaway terminé 🎉", description=f"Aucun participant, le giveaway est annulé.", color=discord.Color.red())
+                await giveaway.message.edit(embed=embed)
+                await giveaway.channel.send("Aucun participant pour le giveaway.")
 
-check_giveaways.start()
+            ended.append(message_id)
+    for msg_id in ended:
+        giveaways.pop(msg_id)
 
-# ========== ON READY ==========
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     await bot.tree.sync(guild=guild)
     print(f"✅ Connecté en tant que {bot.user}")
+    check_giveaways.start()
+
+bot.run(TOKEN)
