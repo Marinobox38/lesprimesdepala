@@ -212,3 +212,7 @@ async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     await bot.tree.sync(guild=guild)
     print(f"✅ Connecté en tant que {bot.user}")
+if __name__ == "__main__":
+    print("Lancement du bot...")
+    bot.run(TOKEN)
+
