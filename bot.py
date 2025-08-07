@@ -5,9 +5,9 @@ import os
 from flask import Flask
 from threading import Thread
 
-# -------------------------------
-# Mini serveur pour Render gratuit
-# -------------------------------
+# -------------------------
+# Mini serveur web pour Render
+# -------------------------
 app = Flask('')
 
 @app.route('/')
@@ -19,13 +19,13 @@ def run():
 
 Thread(target=run).start()
 
-# -------------------------------
+# -------------------------
 # Récupération des variables d'environnement
-# -------------------------------
+# -------------------------
 def must_get_env(var):
     value = os.getenv(var)
     if value is None:
-        raise RuntimeError(f"Missing required environment variable: {var}")
+        raise RuntimeError(f"Variable d'environnement manquante : {var}")
     return value
 
 TOKEN = must_get_env("token")
@@ -33,15 +33,17 @@ GUILD_ID = int(must_get_env("guildId"))
 ADMIN_CHANNEL_ID = int(must_get_env("adminChannelId"))
 FORM_SUBMIT_CHANNEL_ID = int(must_get_env("requestChannelId"))
 PUBLIC_BOUNTY_CHANNEL_ID = int(must_get_env("publicChannelId"))
-# TICKET_CATEGORY_ID = int(os.getenv("ticketCategoryId", 0))  # Optionnel
 
-# -------------------------------
-# Bot Discord
-# -------------------------------
+# -------------------------
+# Initialisation du bot
+# -------------------------
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # Nécessite activation dans Discord Dev Portal
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# -------------------------
+# Modal de formulaire
+# -------------------------
 class BountyForm(discord.ui.Modal, title="Demande de Prime"):
     pseudo_pala = discord.ui.TextInput(label="Votre pseudo Paladium", required=True)
     pseudo_discord = discord.ui.TextInput(label="Votre pseudo Discord", required=True)
@@ -66,6 +68,9 @@ class BountyForm(discord.ui.Modal, title="Demande de Prime"):
         await channel.send(embed=embed, view=view)
         await interaction.response.send_message("Demande envoyée aux administrateurs.", ephemeral=True)
 
+# -------------------------
+# Boutons Accepter / Refuser
+# -------------------------
 class AcceptRefuseView(discord.ui.View):
     def __init__(self, original_embed):
         super().__init__(timeout=None)
@@ -87,6 +92,9 @@ class AcceptRefuseView(discord.ui.View):
     async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("Prime refusée.")
 
+# -------------------------
+# Bouton "J'ai tué la cible"
+# -------------------------
 class ClaimBountyView(discord.ui.View):
     def __init__(self, cible, montant):
         super().__init__(timeout=None)
@@ -108,17 +116,32 @@ Merci de fournir une **preuve de kill** pour la prime sur **{self.cible}**.
 Montant : {self.montant}.
 Un membre du staff va vous répondre.""")
 
+# -------------------------
+# Événement on_ready()
+# -------------------------
 @bot.event
 async def on_ready():
-    print(f"{bot.user} connecté.")
+    print(f"{bot.user} est bien connecté au serveur Discord ✅")
     try:
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"Commandes synchronisées: {len(synced)}")
-    except Exception as e:
-        print(e)
+        # Synchro slash commandes pour le serveur
+        guild = discord.Object(id=GUILD_ID)
+        synced_guild = await bot.tree.sync(guild=guild)
+        print(f"🔁 {len(synced_guild)} commande(s) slash synchronisées pour le serveur {GUILD_ID}.")
 
+        # Synchro globale (optionnelle mais pratique)
+        synced_global = await bot.tree.sync()
+        print(f"🌍 {len(synced_global)} commande(s) slash synchronisées globalement.")
+    except Exception as e:
+        print("❌ Erreur lors de la synchronisation des commandes :", e)
+
+# -------------------------
+# Commande /prime
+# -------------------------
 @bot.tree.command(name="prime", description="Remplir une demande de prime")
 async def prime(interaction: discord.Interaction):
     await interaction.response.send_modal(BountyForm())
 
+# -------------------------
+# Lancement du bot
+# -------------------------
 bot.run(TOKEN)
