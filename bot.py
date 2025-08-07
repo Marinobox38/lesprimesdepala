@@ -236,7 +236,7 @@ async def prime(interaction: discord.Interaction, pseudo: str, cible: str, monta
 
     view = PrimeValidationView(interaction.user, embed, pseudo, cible, montant, faction)
 
-    await interaction.response.send_message(embed=embed, view=view)
+    request_channel = bot.get_channel(REQUEST_CHANNEL_ID) if request_channel:     await request_channel.send(embed=embed, view=view)     await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True) else:     await interaction.response.send_message("❌ Impossible de trouver le salon de propositions.", ephemeral=True)
 
 # Commande /ticket-deploy pour envoyer message avec bouton création ticket
 class TicketDeployView(discord.ui.View):
@@ -320,7 +320,13 @@ class PrimeModal(discord.ui.Modal, title="Proposer une prime"):
         embed.set_footer(text=f"Proposée par {self.pseudo.value}")
 
         view = PrimeValidationView(interaction.user, embed, self.pseudo.value, self.cible.value, self.montant.value, self.faction.value)
-        await interaction.response.send_message(embed=embed, view=view)
+        request_channel = bot.get_channel(REQUEST_CHANNEL_ID)
+if request_channel:
+    await request_channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True)
+else:
+    await interaction.response.send_message("❌ Impossible de trouver le salon de propositions.", ephemeral=True)
+
 
 @bot.tree.command(name="afficher", description="Affiche une explication sur la commande /prime", guild=discord.Object(id=GUILD_ID))
 async def afficher(interaction: discord.Interaction):
