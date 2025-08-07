@@ -272,7 +272,12 @@ async def ticket_deploy(interaction: discord.Interaction):
         color=discord.Color.orange()
     )
     view = TicketDeployView()
-    await interaction.response.send_message(embed=embed, view=view)
+    request_channel = bot.get_channel(REQUEST_CHANNEL_ID)
+if request_channel:
+    await request_channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True)
+else:
+    await interaction.response.send_message("❌ Impossible de trouver le salon de propositions.", ephemeral=True)
 
 # Commande /ticket (ouvre un ticket) - accessible en serveur uniquement
 @bot.tree.command(name="ticket", description="Ouvrir un ticket pour le support", guild=discord.Object(id=GUILD_ID))
@@ -321,7 +326,7 @@ class PrimeModal(discord.ui.Modal, title="Proposer une prime"):
 
         view = PrimeValidationView(interaction.user, embed, self.pseudo.value, self.cible.value, self.montant.value, self.faction.value)
         request_channel = bot.get_channel(REQUEST_CHANNEL_ID)
-if request_channel:
+    if request_channel:
     await request_channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True)
 else:
