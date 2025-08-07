@@ -196,6 +196,70 @@ class PrimeModal(discord.ui.Modal, title="Proposer une Prime"):
         await interaction.response.send_message("✅ Prime envoyée pour validation !", ephemeral=True)
 
 # ========== Commandes ==========
+from discord import app_commands, Interaction, Embed, Color, ui
+from discord.ext import commands
+import discord
+
+GUILD_ID = 1402778898923651242  # Remplace par ton ID de serveur
+
+class ReglementView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="✅ J'accepte", style=discord.ButtonStyle.success, custom_id="reglement_accept")
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Merci d'avoir accepté le règlement ✅", ephemeral=True)
+        try:
+            await interaction.user.send(
+                "👋 Merci d'avoir accepté le règlement du serveur **Les Primes de Paladium** !\n\nTu peux maintenant pleinement participer.\nN'oublie pas de consulter le site : https://lesprimesdepaladium.com"
+            )
+        except discord.Forbidden:
+            pass  # L'utilisateur a désactivé les MP
+
+@bot.tree.command(name="reglement", description="Affiche le règlement du serveur", guild=discord.Object(id=GUILD_ID))
+async def reglement(interaction: Interaction):
+    embed = Embed(
+        title="📜 Règlement du serveur Les Primes de Paladium",
+        description=(
+            "**Bienvenue sur le serveur !**\nMerci de lire et respecter les règles ci-dessous pour une bonne ambiance et un bon fonctionnement. 🚨\n\n"
+            "---------------------------------------------\n\n"
+            "### 1. 🤝 Respect & Comportement\n"
+            "- Soyez **courtois, poli et bienveillant**.\n"
+            "- Aucun propos **haineux, raciste, sexiste ou homophobe** ne sera toléré.\n"
+            "- **Pas d'insultes** ou provocations, même pour plaisanter.\n\n"
+            "### 2. 📢 Communication\n"
+            "- Utilisez les **bons salons**.\n"
+            "- Évitez le **spam**, le flood ou les abus de mentions.\n"
+            "- Pas de **langage SMS** excessif.\n\n"
+            "### 3. 📛 Pseudo & Profil\n"
+            "- Ayez un pseudo **lisible et respectueux**.\n"
+            "- Pas d'usurpation d'identité (staff ou autre).\n\n"
+            "### 4. 📬 Mentions & MP\n"
+            "- N'envoyez pas de **DM non sollicités**.\n"
+            "- Ne mentionnez le staff **qu’en cas de nécessité**.\n\n"
+            "### 5. 💣 Primes & Signalements\n"
+            "- Proposez des **primes sérieuses et justifiées**.\n"
+            "- Les **abus ou fausses primes** seront sanctionnés.\n"
+            "- Utilisez \"🔪 J’ai tué la cible\" seulement **avec une preuve**.\n"
+            "- Utilisez \"🚨 Signaler la prime\" si nécessaire.\n\n"
+            "### 6. 🎟️ Tickets & Support\n"
+            "- Créez un ticket via `/ticket` pour toute demande importante.\n"
+            "- Soyez respectueux dans les échanges avec le staff.\n\n"
+            "### 7. 🛡️ Sanctions\n"
+            "- ⚠️ `/warn` → Avertissement\n"
+            "- ⛔ `/mute` → Mute temporaire\n"
+            "- 🚷 `/kick` → Expulsion\n"
+            "- 🔨 `/ban` → Bannissement\n\n"
+            "### 8. 🌐 Infos utiles\n"
+            "- Site : [https://lesprimesdepaladium.com](https://lesprimesdepaladium.com)\n"
+            "- Besoin d’aide ? Utilise `/ticket`.\n\n"
+            "---------------------------------------------\n\n"
+            "**Merci de votre compréhension et bon jeu à tous !** 🎮\nL’équipe du staff 💙"
+        ),
+        color=Color.gold()
+    )
+    await interaction.response.send_message(embed=embed, view=ReglementView())
+
 @bot.tree.command(name="ping", description="Teste si le bot est en ligne", guild=discord.Object(id=GUILD_ID))
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("🏓 Pong !")
