@@ -92,12 +92,12 @@ class ReportButton(discord.ui.View):
         )
         await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
 
-# ========== Commandes principales ==========
-@bot.tree.command(name="ping", description="Teste si le bot est en ligne")
+# ========== Commandes ==========
+@bot.tree.command(name="ping", description="Teste si le bot est en ligne", guild=discord.Object(id=GUILD_ID))
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("🏓 Pong !")
 
-@bot.tree.command(name="ticket-deploy", description="Déploie le message de création de ticket")
+@bot.tree.command(name="ticket-deploy", description="Déploie le message de création de ticket", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_role(ADMIN_ROLE_ID)
 async def ticket_deploy(interaction: discord.Interaction):
     embed = discord.Embed(title="Besoin d'aide ?", description="Clique sur le bouton ci-dessous pour créer un ticket.", color=discord.Color.blurple())
@@ -105,8 +105,34 @@ async def ticket_deploy(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ Message de ticket envoyé.", ephemeral=True)
 
+@bot.tree.command(name="prime", description="Publie une prime", guild=discord.Object(id=GUILD_ID))
+@app_commands.checks.has_role(ADMIN_ROLE_ID)
+async def prime(interaction: discord.Interaction, cible: str, montant: str):
+    embed = discord.Embed(title="🎯 Nouvelle Prime !", description=f"Cible : **{cible}**\nMontant : **{montant}**", color=discord.Color.red())
+    view = PrimeButtons(cible)
+    view.add_item(discord.ui.Button(label="Réclamer la prime", style=discord.ButtonStyle.success, custom_id="claim_button"))
+    report_view = ReportButton(cible)
+    channel = bot.get_channel(PUBLIC_BOUNTY_CHANNEL_ID)
+    await channel.send(content=f"<@&{PRIME_PING_ROLE_ID}>", embed=embed, view=report_view)
+    await interaction.response.send_message("✅ Prime publiée.", ephemeral=True)
+
+@bot.tree.command(name="ticket", description="Créer un ticket privé", guild=discord.Object(id=GUILD_ID))
+async def ticket(interaction: discord.Interaction):
+    overwrites = {
+        interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        interaction.user: discord.PermissionOverwrite(view_channel=True),
+        interaction.guild.get_role(STAFF_ROLE_ID): discord.PermissionOverwrite(view_channel=True)
+    }
+    ticket_channel = await interaction.guild.create_text_channel(
+        name=f"ticket-{interaction.user.name}",
+        overwrites=overwrites,
+        category=interaction.channel.category
+    )
+    await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — Nouveau ticket de {interaction.user.mention}", view=CloseTicketView())
+    await interaction.response.send_message(f"🎟️ Ticket créé : {ticket_channel.mention}", ephemeral=True)
+
 # ========== Modération ==========
-@bot.tree.command(name="ban", description="Bannir un membre")
+@bot.tree.command(name="ban", description="Bannir un membre", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_role(ADMIN_ROLE_ID)
 async def ban(interaction: discord.Interaction, member: discord.Member, reason: str):
     await member.send(f"❌ Vous avez été banni pour la raison suivante : {reason}")
@@ -114,7 +140,7 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
     await interaction.response.send_message(f"✅ {member.mention} a été banni.")
     await log_action(f"🔨 {member} banni par {interaction.user} — Raison : {reason}")
 
-@bot.tree.command(name="kick", description="Expulser un membre")
+@bot.tree.command(name="kick", description="Expulser un membre", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_role(ADMIN_ROLE_ID)
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str):
     await member.send(f"❌ Vous avez été expulsé pour la raison suivante : {reason}")
@@ -122,7 +148,7 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
     await interaction.response.send_message(f"✅ {member.mention} a été expulsé.")
     await log_action(f"👢 {member} expulsé par {interaction.user} — Raison : {reason}")
 
-@bot.tree.command(name="mute", description="Rendre muet un membre")
+@bot.tree.command(name="mute", description="Rendre muet un membre", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_role(ADMIN_ROLE_ID)
 async def mute(interaction: discord.Interaction, member: discord.Member, duration: int, reason: str):
     until = discord.utils.utcnow() + timedelta(minutes=duration)
@@ -131,7 +157,7 @@ async def mute(interaction: discord.Interaction, member: discord.Member, duratio
     await interaction.response.send_message(f"✅ {member.mention} a été mute {duration} min.")
     await log_action(f"🔇 {member} mute par {interaction.user} pendant {duration} min — Raison : {reason}")
 
-@bot.tree.command(name="unmute", description="Rendre la parole à un membre")
+@bot.tree.command(name="unmute", description="Rendre la parole à un membre", guild=discord.Object(id=GUILD_ID))
 @app_commands.checks.has_role(ADMIN_ROLE_ID)
 async def unmute(interaction: discord.Interaction, member: discord.Member):
     await member.timeout(None)
@@ -140,7 +166,7 @@ async def unmute(interaction: discord.Interaction, member: discord.Member):
     await log_action(f"🔊 {member} unmute par {interaction.user}")
 
 # ========== Commande d'explication prime ==========
-@bot.tree.command(name="afficher", description="Explique le fonctionnement des primes avec un bouton")
+@bot.tree.command(name="afficher", description="Explique le fonctionnement des primes avec un bouton", guild=discord.Object(id=GUILD_ID))
 async def afficher(interaction: discord.Interaction):
     embed = discord.Embed(title="Fonctionnement des primes", description="Clique sur le bouton pour proposer une prime.")
     button = discord.ui.Button(label="Proposer une prime", style=discord.ButtonStyle.primary, custom_id="open_prime")
