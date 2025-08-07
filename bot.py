@@ -332,7 +332,7 @@ class PrimeModal(discord.ui.Modal, title="Proposer une prime"):
 
         view = PrimeValidationView(interaction.user, embed, self.pseudo.value, self.cible.value, self.montant.value, self.faction.value)
         request_channel = bot.get_channel(REQUEST_CHANNEL_ID)
-    if request_channel:
+if request_channel:
     await request_channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True)
 else:
