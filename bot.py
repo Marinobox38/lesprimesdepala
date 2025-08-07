@@ -5,7 +5,7 @@ import os
 from flask import Flask
 from threading import Thread
 
-# ------------------ Mini serveur Flask pour Render ------------------
+# Mini serveur Flask pour Render
 app = Flask('')
 
 @app.route('/')
@@ -17,7 +17,7 @@ def run():
 
 Thread(target=run).start()
 
-# ------------------ Récupération des variables ------------------
+# Variables d’environnement obligatoires
 def must_get_env(var):
     value = os.getenv(var)
     if value is None:
@@ -30,16 +30,14 @@ ADMIN_CHANNEL_ID = int(must_get_env("adminChannelId"))
 FORM_SUBMIT_CHANNEL_ID = int(must_get_env("requestChannelId"))
 PUBLIC_BOUNTY_CHANNEL_ID = int(must_get_env("publicChannelId"))
 
-# ------------------ Intents + bot ------------------
+# Initialisation du bot
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ------------------ Formulaire principal ------------------
+# Formulaire de prime corrigé (5 champs max)
 class BountyForm(discord.ui.Modal, title="Demande de Prime"):
     pseudo_pala = discord.ui.TextInput(label="Votre pseudo Paladium", required=True)
-    pseudo_discord = discord.ui.TextInput(label="Votre pseudo Discord", required=False)
-    email = discord.ui.TextInput(label="Adresse e-mail", required=False)
     cible = discord.ui.TextInput(label="Pseudo du joueur visé", required=True)
     montant = discord.ui.TextInput(label="Montant de la prime", required=True)
     preuve_paiement = discord.ui.TextInput(
@@ -58,8 +56,6 @@ class BountyForm(discord.ui.Modal, title="Demande de Prime"):
             print("✅ Formulaire Bounty soumis")
             embed = discord.Embed(title="Nouvelle demande de prime", color=discord.Color.orange())
             embed.add_field(name="Pseudo Paladium", value=self.pseudo_pala.value, inline=False)
-            embed.add_field(name="Pseudo Discord", value=self.pseudo_discord.value or "Non fourni", inline=False)
-            embed.add_field(name="Email", value=self.email.value or "Non fourni", inline=False)
             embed.add_field(name="Cible", value=self.cible.value, inline=False)
             embed.add_field(name="Montant", value=self.montant.value, inline=False)
             embed.add_field(name="Preuve", value=self.preuve_paiement.value, inline=False)
@@ -78,7 +74,7 @@ class BountyForm(discord.ui.Modal, title="Demande de Prime"):
             print("❌ Erreur dans on_submit :", e)
             await interaction.response.send_message("Une erreur est survenue lors de la soumission.", ephemeral=True)
 
-# ------------------ Vue Accepter / Refuser ------------------
+# Boutons Accepter / Refuser
 class AcceptRefuseView(discord.ui.View):
     def __init__(self, original_embed):
         super().__init__(timeout=None)
@@ -87,11 +83,11 @@ class AcceptRefuseView(discord.ui.View):
     @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(title="🎯 Prime active !", color=discord.Color.red())
-        embed.add_field(name="Cible", value=self.original_embed.fields[3].value, inline=False)
-        embed.add_field(name="Montant", value=self.original_embed.fields[4].value, inline=False)
+        embed.add_field(name="Cible", value=self.original_embed.fields[1].value, inline=False)
+        embed.add_field(name="Montant", value=self.original_embed.fields[2].value, inline=False)
         embed.set_footer(text="Cliquez sur le bouton ci-dessous pour réclamer la prime.")
 
-        view = ClaimBountyView(self.original_embed.fields[3].value, self.original_embed.fields[4].value)
+        view = ClaimBountyView(self.original_embed.fields[1].value, self.original_embed.fields[2].value)
         channel = bot.get_channel(PUBLIC_BOUNTY_CHANNEL_ID)
         await channel.send(embed=embed, view=view)
         await interaction.response.send_message("Prime acceptée et publiée.")
@@ -100,7 +96,7 @@ class AcceptRefuseView(discord.ui.View):
     async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("Prime refusée.")
 
-# ------------------ Vue "J'ai tué la cible" ------------------
+# Vue "J'ai tué la cible"
 class ClaimBountyView(discord.ui.View):
     def __init__(self, cible, montant):
         super().__init__(timeout=None)
@@ -122,7 +118,7 @@ Merci de fournir une **preuve de kill** pour la prime sur **{self.cible}**.
 Montant : {self.montant}.
 Un membre du staff va vous répondre.""")
 
-# ------------------ on_ready avec synchro et logs ------------------
+# Synchronisation des slash commands
 @bot.event
 async def on_ready():
     print(f"✅ {bot.user} est bien connecté à Discord")
@@ -135,16 +131,16 @@ async def on_ready():
     except Exception as e:
         print("❌ Erreur lors de la synchronisation :", e)
 
-# ------------------ Commande /prime ------------------
+# Commande /prime
 @bot.tree.command(name="prime", description="Remplir une demande de prime")
 async def prime(interaction: discord.Interaction):
     print("📥 Commande /prime reçue")
     await interaction.response.send_modal(BountyForm())
 
-# ------------------ Commande /ping (test) ------------------
+# Commande /ping
 @bot.tree.command(name="ping", description="Teste la connexion avec le bot")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("🏓 Pong ! Je suis en ligne.", ephemeral=True)
 
-# ------------------ Lancement ------------------
+# Démarrage du bot
 bot.run(TOKEN)
