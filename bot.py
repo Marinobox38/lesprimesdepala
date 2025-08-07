@@ -157,7 +157,7 @@ class ClaimBountyView(discord.ui.View):
         view = CloseTicketView()
         await ticket_channel.send(f"<@&{STAFF_ROLE_ID}> — {interaction.user.mention} réclame une prime sur **{self.cible}**.")
 Montant : {self.montant}
-Merci d'envoyer la preuve ici !", view=view)
+await interaction.followup.send('Merci d\'envoyer la preuve ici !', view=view)
         await interaction.response.send_message(f"✅ Ticket ouvert : {ticket_channel.mention}", ephemeral=True)
 
     @discord.ui.button(label="Signaler la prime", style=discord.ButtonStyle.danger)
