@@ -236,10 +236,13 @@ async def prime(interaction: discord.Interaction, pseudo: str, cible: str, monta
 
     view = PrimeValidationView(interaction.user, embed, pseudo, cible, montant, faction)
 
-    request_channel = bot.get_channel(REQUEST_CHANNEL_ID) if request_channel:     
-    await request_channel.send(embed=embed, view=view)     
-    await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True) else:     
+request_channel = bot.get_channel(REQUEST_CHANNEL_ID)
+if request_channel:
+    await request_channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ Votre prime a été envoyée au staff pour validation.", ephemeral=True)
+else:
     await interaction.response.send_message("❌ Impossible de trouver le salon de propositions.", ephemeral=True)
+
 
 # Commande /ticket-deploy pour envoyer message avec bouton création ticket
 class TicketDeployView(discord.ui.View):
