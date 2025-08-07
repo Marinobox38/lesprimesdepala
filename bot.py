@@ -142,5 +142,39 @@ async def prime(interaction: discord.Interaction):
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("🏓 Pong ! Je suis en ligne.", ephemeral=True)
 
+@bot.tree.command(name="ticket", description="Ouvre un ticket avec un utilisateur pour discuter en privé")
+@app_commands.describe(user="Utilisateur avec qui ouvrir le ticket")
+async def open_ticket(interaction: discord.Interaction, user: discord.User):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("Cette commande ne peut être utilisée que dans un serveur.", ephemeral=True)
+        return
+
+    # Vérifie si la catégorie "Tickets" existe, sinon la créer
+    category = discord.utils.get(guild.categories, name="Tickets") or await guild.create_category("Tickets")
+
+    # Permissions : seul le staff (l'utilisateur qui exécute) et le joueur mentionné peuvent voir
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+    }
+
+    # Créer le salon
+    ticket_channel = await guild.create_text_channel(
+        name=f"ticket-{user.name}",
+        overwrites=overwrites,
+        category=category
+    )
+
+    # Envoyer un message d'accueil
+    await ticket_channel.send(
+        f"Bonjour {user.mention} ! Un membre du staff a ouvert un ticket avec toi.\n"
+        f"{interaction.user.mention} est là pour discuter avec toi. N'hésite pas à poser tes questions !"
+    )
+
+    await interaction.response.send_message(f"✅ Ticket ouvert ici : {ticket_channel.mention}", ephemeral=True)
+
+
 # Démarrage du bot
 bot.run(TOKEN)
