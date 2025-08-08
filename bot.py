@@ -8,7 +8,6 @@ from threading import Thread
 from datetime import datetime, timedelta
 import asyncio
 
-# ========== Flask Keep Alive ==========
 app = Flask('')
 
 @app.route('/')
@@ -20,7 +19,6 @@ def run():
 
 Thread(target=run).start()
 
-# ========== Variables ==========
 def must_get_env(var):
     value = os.getenv(var)
     if value is None:
@@ -43,7 +41,6 @@ TICKET_CATEGORY_ID = None  # À définir si tu veux organiser les tickets dans u
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ========== Messages de bienvenue ==========
 welcome_messages = [
     "Bienvenue sur le serveur !",
     "Salut et bienvenue, amuse-toi bien !",
@@ -52,7 +49,7 @@ welcome_messages = [
     "Bienvenue, prêt à relever des défis ?"
 ]
 
-# ========== On Ready ==========
+
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
@@ -60,7 +57,7 @@ async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     check_giveaways.start()  # démarre la tâche de vérification des giveaways
 
-# ========== Bienvenue ==========
+
 @bot.event
 async def on_member_join(member: discord.Member):
     channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
@@ -78,13 +75,13 @@ async def on_member_join(member: discord.Member):
     except discord.Forbidden:
         pass
 
-# ========== Logs ==========
+
 async def log_action(message):
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if channel:
         await channel.send(message)
 
-# ========== Views ==========
+
 class CloseTicketView(discord.ui.View):
     def __init__(self, ticket_channel):
         super().__init__(timeout=None)
@@ -207,7 +204,7 @@ class PrimeValidationView(discord.ui.View):
         await interaction.response.send_message("❌ Prime refusée et auteur prévenu.", ephemeral=True)
         await interaction.message.delete()
 
-# ========== Commandes Slash ==========
+
 
 @bot.tree.command(name="prime", description="Proposer une prime", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(
@@ -353,7 +350,7 @@ async def embed(interaction: discord.Interaction, title: str, description: str, 
     embed_msg = discord.Embed(title=title, description=description, color=color_value)
     await interaction.response.send_message(embed=embed_msg)
 
-# ========== Modération (ban, kick, mute, unmute) ==========
+
 async def send_log_and_dm(action, member: discord.Member, staff: discord.Member, reason: str):
     # Envoi DM à la cible
     try:
@@ -380,6 +377,34 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
     await member.kick(reason=reason)
     await send_log_and_dm("kické", member, interaction.user, reason)
     await interaction.response.send_message(f"{member} a été expulsé.", ephemeral=True)
+
+import discord
+from discord.ext import commands
+
+bot = commands.Bot(command_prefix="/")
+
+# ID du salon où envoyer les demandes de primes
+PRIME_CHANNEL_ID = 1402778898923651242
+
+@bot.command(name="demandeprime")
+async def demande_prime(ctx, *, contenu: str):
+    # Récupérer le salon cible
+    channel = bot.get_channel(PRIME_CHANNEL_ID)
+    if channel is None:
+        await ctx.send("Le salon pour les demandes de primes est introuvable.")
+        return
+
+    # Envoyer la demande de prime dans le salon dédié
+    embed = discord.Embed(title="Nouvelle demande de prime", description=contenu, color=0x00ff00)
+    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+    embed.timestamp = ctx.message.created_at
+
+    await channel.send(embed=embed)
+    await ctx.send("Votre demande de prime a bien été envoyée !")
+
+# Démarrage du bot (à compléter avec ton token)
+# bot.run("TON_TOKEN")
+
 
 # Mute/unmute via rôle "Muted" à créer dans ton serveur
 MUTED_ROLE_NAME = "Muted"
@@ -408,84 +433,8 @@ async def unmute(interaction: discord.Interaction, member: discord.Member):
     await send_log_and_dm("unmuté", member, interaction.user, "Unmute manuel")
     await interaction.response.send_message(f"{member} a été unmute.", ephemeral=True)
 
-# ========== Giveaways ==========
-giveaways = {}  # stocke giveaways actifs : message_id -> info
 
-@bot.tree.command(name="giveaway", description="Créer un giveaway", guild=discord.Object(id=GUILD_ID))
-@commands.has_role(ADMIN_ROLE_ID)
-@app_commands.describe(
-    channel="Salon où poster le giveaway",
-    prize="Nom du cadeau",
-    duration="Durée en minutes",
-    winners="Nombre de gagnants"
-)
-async def giveaway(interaction: discord.Interaction, channel: discord.TextChannel, prize: str, duration: int, winners: int):
-    if duration <= 0 or winners <= 0:
-        await interaction.response.send_message("La durée et le nombre de gagnants doivent être positifs.", ephemeral=True)
-        return
-    embed = discord.Embed(
-        title="🎉 Giveaway !",
-        description=f"Prix : {prize}\nDurée : {duration} minutes\nNombre de gagnants : {winners}",
-        color=discord.Color.gold(),
-        timestamp=datetime.utcnow()
-    )
-    embed.set_footer(text="Cliquez sur 🎉 pour participer !")
 
-    view = GiveawayView()
-    msg = await channel.send(embed=embed, view=view)
-
-    end_time = datetime.utcnow() + timedelta(minutes=duration)
-    giveaways[msg.id] = {
-        "channel_id": channel.id,
-        "message_id": msg.id,
-        "prize": prize,
-        "end_time": end_time,
-        "winners": winners,
-        "participants": set()
-    }
-
-    await interaction.response.send_message(f"Giveaway créé dans {channel.mention}", ephemeral=True)
-
-class GiveawayView(discord.ui.View):
-    @discord.ui.button(emoji="🎉", style=discord.ButtonStyle.secondary, custom_id="giveaway_participate")
-    async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
-        giveaway_info = giveaways.get(interaction.message.id)
-        if giveaway_info is None:
-            await interaction.response.send_message("Ce giveaway n'existe plus.", ephemeral=True)
-            return
-        if interaction.user.id in giveaway_info["participants"]:
-            await interaction.response.send_message("Vous participez déjà à ce giveaway.", ephemeral=True)
-            return
-        giveaway_info["participants"].add(interaction.user.id)
-        await interaction.response.send_message("Participation enregistrée !", ephemeral=True)
-
-@tasks.loop(seconds=30)
-async def check_giveaways():
-    now = datetime.utcnow()
-    to_remove = []
-    for msg_id, info in giveaways.items():
-        if now >= info["end_time"]:
-            channel = bot.get_channel(info["channel_id"])
-            if channel is None:
-                to_remove.append(msg_id)
-                continue
-            try:
-                msg = await channel.fetch_message(msg_id)
-            except discord.NotFound:
-                to_remove.append(msg_id)
-                continue
-            participants = list(info["participants"])
-            if len(participants) == 0:
-                await channel.send(f"Giveaway pour **{info['prize']}** terminé : aucun participant.")
-            else:
-                winners = random.sample(participants, min(info["winners"], len(participants)))
-                winners_mentions = ", ".join(f"<@{w}>" for w in winners)
-                await channel.send(f"🎉 Giveaway terminé ! Félicitations à : {winners_mentions} pour **{info['prize']}** !")
-            to_remove.append(msg_id)
-    for msg_id in to_remove:
-        giveaways.pop(msg_id, None)
-
-# ========== Erreurs et autorisations ==========
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRole):
@@ -500,5 +449,4 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     else:
         await interaction.response.send_message(f"Erreur : {error}", ephemeral=True)
 
-# ========== Lancement du bot ==========
 bot.run(TOKEN)
